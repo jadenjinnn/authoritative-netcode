@@ -25,6 +25,7 @@ _deps/
 CLAUDE.local.md
 .env
 *.local
+.claude/settings.local.json
 
 # Metrics/observability runtime data
 prometheus-data/
