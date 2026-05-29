@@ -3,6 +3,18 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-29 — Socket interface (`ISocket`) extracted for the artificial-network shim
+The send/recv seam is now a pure-virtual `ISocket` (`send_to`, `try_recv_from`,
+`local_endpoint`); `UdpSocket` and the `SimSocket` loss shim both implement it. Resolves
+the "extract when forced" note in the concrete-`UdpSocket` entry below.
+- **Rejected:** an always-on pass-through shim (impairment off in prod) — puts indirection
+  on the latency path we measure; and templating callers on socket type — bloats call sites
+  for a vcall that's noise next to `sendto`.
+- **Why:** the shim is the first real second implementation, so the seam is no longer
+  speculative. Runtime polymorphism lets measurement builds wrap a real socket while
+  production wires `UdpSocket` directly (no shim overhead on the measured path); the
+  vcall (~ns) is negligible against the `sendto` syscall (~µs).
+
 ## 2026-05-29 — Tick rate: 60 Hz
 Authoritative sim runs at a fixed 60 Hz (`kDt = 1/60`).
 - **Rejected:** 30 Hz.

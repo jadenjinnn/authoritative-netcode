@@ -8,6 +8,10 @@ add_executable(net_tests udp_socket_test.cpp)
 target_link_libraries(net_tests PRIVATE net GTest::gtest_main)
 gtest_discover_tests(net_tests)
 
+add_executable(sim_socket_tests sim_socket_test.cpp)
+target_link_libraries(sim_socket_tests PRIVATE net GTest::gtest_main)
+gtest_discover_tests(sim_socket_tests)
+
 add_executable(connection_tests connection_test.cpp)
 target_link_libraries(connection_tests PRIVATE reliable GTest::gtest_main)
 gtest_discover_tests(connection_tests)

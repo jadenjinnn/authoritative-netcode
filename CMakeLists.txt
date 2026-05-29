@@ -25,6 +25,7 @@ find_package(Threads REQUIRED)
 # Subdirectories are added per phase as modules land.
 add_subdirectory(transport/net)
 add_subdirectory(transport/reliable)
+add_subdirectory(transport/examples)
 add_subdirectory(sim)
 add_subdirectory(server)
 add_subdirectory(client)
