@@ -3,6 +3,14 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-29 — Socket abstraction: concrete UdpSocket, no interface yet
+The BSD socket lives behind a plain `UdpSocket` class (RAII over the fd); its public API
+is the seam, not a polymorphic `ISocket`.
+- **Rejected:** a pure-virtual socket interface up front so a second backend could slot in.
+- **Why:** one backend exists. The first real consumer of indirection is the P1
+  artificial-network shim — extract the interface when that forces the question, not before.
+  An interface today is speculative; the class API is already the boundary callers see.
+
 ## 2026-05-27 — Dev/runtime platform: WSL2 + BSD sockets
 Develop, build, and run inside WSL2 (Ubuntu) on Windows 11; BSD sockets only.
 - **Rejected:** native Windows/Winsock (forces a portability shim immediately) and

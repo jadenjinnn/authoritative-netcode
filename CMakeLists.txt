@@ -20,6 +20,11 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# Subdirectories are added per phase as modules land (transport/, server/, client/, ...).
+find_package(Threads REQUIRED)
+
+# Subdirectories are added per phase as modules land.
+add_subdirectory(transport/net)
 add_subdirectory(sim)
+add_subdirectory(server)
+add_subdirectory(client)
 add_subdirectory(tests)
