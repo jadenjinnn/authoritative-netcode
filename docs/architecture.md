@@ -65,4 +65,8 @@ optimization gated on a measured baseline.
 - Client renderer lib: raylib (simplest) vs SDL2 vs SFML. Skeleton is headless, so defer.
 - Entity/ID scheme + quantization params (world size, precision bits). Defer to L1.
 - prometheus-cpp vs a hand-rolled exposition endpoint. Confirm at P2.
+- Packaging: Docker Compose to stand up server + bots + Prometheus + Grafana as a one-command
+  reproducible measurement harness — run the *measured* server on host networking so the latency
+  numbers stay clean. Not Kubernetes: its NAT/overlay networking fights low-latency UDP (the
+  reason Agones exists) and would taint the results table. Confirm at P2.
 - Threading model for snapshot serialization (per-client parallel?). Defer; measure first.
