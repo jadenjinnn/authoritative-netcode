@@ -15,3 +15,7 @@ gtest_discover_tests(sim_socket_tests)
 add_executable(connection_tests connection_test.cpp)
 target_link_libraries(connection_tests PRIVATE reliable GTest::gtest_main)
 gtest_discover_tests(connection_tests)
+
+add_executable(reliable_channel_tests reliable_channel_test.cpp)
+target_link_libraries(reliable_channel_tests PRIVATE reliable GTest::gtest_main)
+gtest_discover_tests(reliable_channel_tests)

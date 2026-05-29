@@ -3,6 +3,20 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-29 — Reliability layered on the ack system; resend the whole unacked set
+Reliable delivery is a `ReliableChannel` *above* the packet ack system, not baked into
+`Connection`. The sender keeps unacked messages queued and re-attaches the entire set to
+every outgoing packet; an ack retires the messages that packet carried. Receiver dedups by
+id (resends can arrive twice). Unordered for now.
+- **Rejected:** folding message state into `Connection` (couples the pure seq/ack
+  bookkeeper to delivery policy); per-message retransmit timers / selective NAK (more moving
+  parts, needs an RTT estimate we don't have yet).
+- **Why:** keeps `Connection` single-purpose and lets one connection host mixed reliabilities
+  later (unreliable + reliable channels). Re-sending the full unacked set is the
+  naive-correct baseline — loss self-heals with no loss detection at all. Bounding what
+  rides each packet is congestion control (slice 5); unbounded is fine until a bandwidth
+  number says otherwise. An ordered channel later just layers a reorder buffer on receive.
+
 ## 2026-05-29 — Socket interface (`ISocket`) extracted for the artificial-network shim
 The send/recv seam is now a pure-virtual `ISocket` (`send_to`, `try_recv_from`,
 `local_endpoint`); `UdpSocket` and the `SimSocket` loss shim both implement it. Resolves
