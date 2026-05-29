@@ -1,6 +1,7 @@
 #include "udp_socket.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -8,6 +9,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -21,7 +23,6 @@ namespace net
             throw std::runtime_error(std::string(what) + ": " + std::strerror(errno));
         }
 
-        // TODO(jaden): pack Endpoint (ip, port) into a sockaddr_in.
         sockaddr_in to_sockaddr(const Endpoint &ep)
         {
             sockaddr_in addr{};
@@ -32,7 +33,6 @@ namespace net
             return addr;
         }
 
-        // TODO(jaden): unpack a sockaddr_in into an Endpoint.
         Endpoint from_sockaddr(const sockaddr_in &addr)
         {
             Endpoint ep{};
@@ -95,7 +95,6 @@ namespace net
         }
     }
 
-    // TODO(jaden): bind fd_ to `port` on INADDR_ANY.
     void UdpSocket::bind(uint16_t port)
     {
         Endpoint ep{};
@@ -131,6 +130,36 @@ namespace net
                                reinterpret_cast<sockaddr *>(&src), &srclen);
         if (n < 0)
         {
+            fail("recvfrom");
+        }
+        return RecvResult{static_cast<size_t>(n), from_sockaddr(src)};
+    }
+
+    void UdpSocket::set_nonblocking()
+    {
+        int flags = ::fcntl(fd_, F_GETFL, 0);
+        if (flags < 0)
+        {
+            fail("fcntl(F_GETFL)");
+        }
+        if (::fcntl(fd_, F_SETFL, flags | O_NONBLOCK) < 0)
+        {
+            fail("fcntl(F_SETFL)");
+        }
+    }
+
+    std::optional<UdpSocket::RecvResult> UdpSocket::try_recv_from(void *buf, size_t cap)
+    {
+        sockaddr_in src{};
+        socklen_t srclen = sizeof(src);
+        ssize_t n = ::recvfrom(fd_, buf, cap, 0,
+                               reinterpret_cast<sockaddr *>(&src), &srclen);
+        if (n < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            {
+                return std::nullopt;
+            }
             fail("recvfrom");
         }
         return RecvResult{static_cast<size_t>(n), from_sockaddr(src)};

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 #include "endpoint.h"
 
@@ -28,10 +29,16 @@ public:
 
     void set_recv_timeout(int millis);
 
+    // Non-blocking mode: recv calls return immediately when nothing is queued.
+    void set_nonblocking();
+
     size_t send_to(const void* data, size_t len, const Endpoint& dest);
 
     // Blocks until a datagram arrives (or the recv timeout elapses, if set).
     RecvResult recv_from(void* buf, size_t cap);
+
+    // nullopt when no datagram is queued (only meaningful in non-blocking mode).
+    std::optional<RecvResult> try_recv_from(void* buf, size_t cap);
 
     Endpoint local_endpoint() const;
 
