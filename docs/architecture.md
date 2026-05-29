@@ -59,9 +59,6 @@ optimization gated on a measured baseline.
 - Output: `server`, `client`, `bots` binaries; `transport` library + its tests.
 
 ## Open questions (decide later — do NOT pin now)
-- Server I/O model: single-threaded blocking `recvfrom` in the tick loop (skeleton-fine)
-  → `epoll` / non-blocking when bot count demands it. Decision entry when we switch.
-- Tick rate: 30 vs 60 Hz. Decide at first sim work.
 - Client renderer lib: raylib (simplest) vs SDL2 vs SFML. Skeleton is headless, so defer.
 - Entity/ID scheme + quantization params (world size, precision bits). Defer to L1.
 - prometheus-cpp vs a hand-rolled exposition endpoint. Confirm at P2.

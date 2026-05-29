@@ -3,6 +3,23 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-29 — Tick rate: 60 Hz
+Authoritative sim runs at a fixed 60 Hz (`kDt = 1/60`).
+- **Rejected:** 30 Hz.
+- **Why:** 60 Hz halves input-to-state latency vs 30 and is the de-facto bar for action
+  games. The fixed-timestep accumulator already decouples sim rate from loop/render rate,
+  so the cost is CPU per tick — which we measure under bot load. Revisit only if P2 numbers
+  say 60 doesn't scale.
+
+## 2026-05-29 — Server I/O: non-blocking recvfrom drained per tick
+The tick loop sets the socket `O_NONBLOCK` and drains ready datagrams each tick;
+`EAGAIN`/`EWOULDBLOCK` returns `nullopt` and the loop advances the sim anyway.
+- **Rejected:** blocking `recvfrom` (the skeleton default), and `epoll`.
+- **Why:** the loop must tick on a fixed schedule regardless of packet arrival — blocking
+  couples sim cadence to traffic, so a quiet client would stall the authoritative tick.
+  `epoll` is the move when many clients make per-tick draining the bottleneck; that's a
+  measured P2 decision, not a skeleton one.
+
 ## 2026-05-29 — Socket abstraction: concrete UdpSocket, no interface yet
 The BSD socket lives behind a plain `UdpSocket` class (RAII over the fd); its public API
 is the seam, not a polymorphic `ISocket`.
