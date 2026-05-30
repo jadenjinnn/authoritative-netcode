@@ -1,8 +1,7 @@
-// Reliable delivery over a lossy wire: pushes N reliable messages client ->
-// server through the loss shim, server acks back over a clean path, and the
-// sender re-attaches anything unacked to later packets until everything lands.
-// Contrast with reliable_demo: that measures raw packet survival (~80% at 20%
-// loss); this recovers to 100% delivered, and reports the retransmit cost.
+// Two channels on one connection over a lossy wire: unreliable "snapshots"
+// (one per tick, dropped ones stay dropped) ride the same packets as reliable
+// "events" (resent until acked). Shows the payoff of multiplexing -- the event
+// stream reaches 100% while the snapshot stream just thins out, no resend cost.
 
 #include <array>
 #include <chrono>
@@ -21,7 +20,7 @@
 
 namespace {
 
-constexpr int kMessages = 500;
+constexpr int kEvents = 200;
 
 std::vector<uint8_t> encode(uint32_t value) {
     std::vector<uint8_t> bytes(sizeof(value));
@@ -29,7 +28,7 @@ std::vector<uint8_t> encode(uint32_t value) {
     return bytes;
 }
 
-// Wire layout: [PacketHeader][uint16 count]{ [uint16 id][uint16 len][bytes] }*
+// Wire layout: [PacketHeader][uint16 count]{ [uint8 channel][uint16 id][uint16 len][bytes] }*
 size_t write_packet(char* buf, const reliable::PacketHeader& header,
                     const std::vector<reliable::Message>& msgs) {
     size_t off = 0;
@@ -41,6 +40,9 @@ size_t write_packet(char* buf, const reliable::PacketHeader& header,
     off += sizeof(count);
 
     for (const reliable::Message& m : msgs) {
+        uint8_t channel = static_cast<uint8_t>(m.channel);
+        std::memcpy(buf + off, &channel, sizeof(channel));
+        off += sizeof(channel);
         std::memcpy(buf + off, &m.id, sizeof(m.id));
         off += sizeof(m.id);
         uint16_t len = static_cast<uint16_t>(m.payload.size());
@@ -64,6 +66,10 @@ std::vector<reliable::Message> read_packet(const char* buf, reliable::PacketHead
     std::vector<reliable::Message> msgs;
     for (uint16_t i = 0; i < count; ++i) {
         reliable::Message m;
+        uint8_t channel = 0;
+        std::memcpy(&channel, buf + off, sizeof(channel));
+        off += sizeof(channel);
+        m.channel = static_cast<reliable::Channel>(channel);
         std::memcpy(&m.id, buf + off, sizeof(m.id));
         off += sizeof(m.id);
         uint16_t len = 0;
@@ -95,39 +101,44 @@ int main(int argc, char** argv) {
 
     reliable::Connection sender_conn;
     reliable::Connection server_conn;
-    reliable::ReliableSender sender;
-    reliable::ReliableReceiver receiver;
+    reliable::ChannelMux mux;
+    reliable::ChannelDemux demux;
 
-    int next_to_queue = 0;
-    int delivered = 0;
+    int events_queued = 0;
+    int events_delivered = 0;
+    int snapshots_sent = 0;
+    int snapshots_delivered = 0;
     int guard = 0;
     std::array<char, 8192> buf{};
 
-    while ((next_to_queue < kMessages || !sender.empty()) && guard++ < 200000) {
-        if (next_to_queue < kMessages) {
-            sender.queue(encode(next_to_queue++));
+    while ((events_queued < kEvents || !mux.reliable().empty()) && guard++ < 200000) {
+        if (events_queued < kEvents) {
+            mux.reliable().queue(encode(events_queued++));
         }
+        mux.unreliable().queue(encode(snapshots_sent++));
 
         reliable::PacketHeader header = sender_conn.next_header();
-        std::vector<reliable::Message> msgs = sender.pack(header.sequence);
+        std::vector<reliable::Message> msgs = mux.pack(header.sequence);
         size_t n = write_packet(buf.data(), header, msgs);
         client_sock.send_to(buf.data(), n, server_addr);
 
         std::this_thread::sleep_for(std::chrono::microseconds(200));
 
-        // Server: ingest data packets, deliver fresh messages, ack back clean.
+        // Server: ingest data packets, route by channel, ack back clean.
         while (auto r = server_udp.try_recv_from(buf.data(), buf.size())) {
             reliable::PacketHeader in;
             std::vector<reliable::Message> got = read_packet(buf.data(), in);
             server_conn.on_received(in);
-            delivered += static_cast<int>(receiver.receive(got).size());
+            reliable::ChannelDemux::Delivery d = demux.route(got);
+            events_delivered += static_cast<int>(d.reliable.size());
+            snapshots_delivered += static_cast<int>(d.unreliable.size());
 
             reliable::PacketHeader ack = server_conn.next_header();
             size_t m = write_packet(buf.data(), ack, {});
             server_udp.send_to(buf.data(), m, r->from);
         }
 
-        // Client: ingest acks, retire messages the ack confirms.
+        // Client: ingest acks, retire the events they confirm.
         while (client_sock.try_recv_from(buf.data(), buf.size())) {
             reliable::PacketHeader ack;
             read_packet(buf.data(), ack);
@@ -135,21 +146,24 @@ int main(int argc, char** argv) {
             for (int i = 0; i <= 32; ++i) {
                 uint16_t seq = static_cast<uint16_t>(ack.ack - i);
                 if (sender_conn.is_acked(seq)) {
-                    sender.on_acked(seq);
+                    mux.on_acked(seq);
                 }
             }
         }
     }
 
     double shim_loss = static_cast<double>(client_sock.dropped()) / client_sock.sent();
-    double rate = static_cast<double>(delivered) / kMessages;
+    double event_rate = static_cast<double>(events_delivered) / kEvents;
+    double snap_rate = static_cast<double>(snapshots_delivered) / snapshots_sent;
 
-    std::printf("messages:         %d\n", kMessages);
-    std::printf("configured loss:  %.1f%%\n", loss * 100.0);
-    std::printf("packets sent:     %llu (shim dropped %llu, %.1f%%)\n",
+    std::printf("configured loss:        %.1f%%\n", loss * 100.0);
+    std::printf("packets sent:           %llu (shim dropped %llu, %.1f%%)\n",
                 static_cast<unsigned long long>(client_sock.sent()),
                 static_cast<unsigned long long>(client_sock.dropped()), shim_loss * 100.0);
-    std::printf("retransmits:      %d\n", sender.retransmits());
-    std::printf("delivered:        %d / %d (%.1f%%)\n", delivered, kMessages, rate * 100.0);
+    std::printf("retransmits:            %d\n", mux.reliable().retransmits());
+    std::printf("events    (reliable):   %d / %d delivered (%.1f%%)\n",
+                events_delivered, kEvents, event_rate * 100.0);
+    std::printf("snapshots (unreliable): %d / %d delivered (%.1f%%, dropped stay dropped)\n",
+                snapshots_delivered, snapshots_sent, snap_rate * 100.0);
     return 0;
 }

@@ -3,6 +3,20 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-30 — Mixed-reliability channels: a channel tag per message, uniform frame
+One connection multiplexes an unreliable stream (snapshots/input — sent once, drop OK)
+and the reliable stream (events) from slice 3. Each message carries a 1-byte channel tag;
+a `ChannelMux` packs both senders into one packet and a `ChannelDemux` routes by tag on
+receive (reliable deduped, unreliable passed through). Acks only touch the reliable channel.
+- **Rejected:** per-channel grouped sections on the wire (`[channel][count]{msgs}*`), which
+  saves the redundant id on unreliable messages but makes framing channel-aware and the
+  parse loop branchier.
+- **Why:** the uniform `[channel][id][len][bytes]` frame keeps serialization dumb and pushes
+  all policy into the channel layer — same split as "`Connection` is a bookkeeper." The few
+  wasted bytes on unreliable messages are P3's problem (bit-packing/quantization reclaims
+  them properly); a slice shouldn't pre-optimize the wire. The two channels share only the
+  packet sequence, so there's no cross-channel coupling to reason about.
+
 ## 2026-05-29 — Reliability layered on the ack system; resend the whole unacked set
 Reliable delivery is a `ReliableChannel` *above* the packet ack system, not baked into
 `Connection`. The sender keeps unacked messages queued and re-attaches the entire set to

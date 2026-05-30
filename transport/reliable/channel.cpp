@@ -1,6 +1,7 @@
-#include "reliable_channel.h"
+#include "channel.h"
 
 #include <algorithm>
+#include <iterator>
 #include <unordered_set>
 #include <utility>
 
@@ -9,7 +10,7 @@ namespace reliable
 
     void ReliableSender::queue(std::vector<uint8_t> payload)
     {
-        unacked_.push_back(Pending{Message{next_id_++, std::move(payload)}, 0});
+        unacked_.push_back(Pending{Message{Channel::Reliable, next_id_++, std::move(payload)}, 0});
     }
 
     std::vector<Message> ReliableSender::pack(uint16_t sequence)
@@ -62,6 +63,46 @@ namespace reliable
             }
         }
         return fresh;
+    }
+
+    void UnreliableSender::queue(std::vector<uint8_t> payload)
+    {
+        pending_.push_back(Message{Channel::Unreliable, next_id_++, std::move(payload)});
+    }
+
+    std::vector<Message> UnreliableSender::pack()
+    {
+        std::vector<Message> out = std::move(pending_);
+        pending_.clear();
+        return out;
+    }
+
+    std::vector<Message> ChannelMux::pack(uint16_t sequence)
+    {
+        std::vector<Message> out = reliable_.pack(sequence);
+        std::vector<Message> unreliable = unreliable_.pack();
+        out.insert(out.end(), std::make_move_iterator(unreliable.begin()),
+                   std::make_move_iterator(unreliable.end()));
+        return out;
+    }
+
+    ChannelDemux::Delivery ChannelDemux::route(const std::vector<Message> &incoming)
+    {
+        std::vector<Message> reliable_batch;
+        Delivery out;
+        for (const Message &m : incoming)
+        {
+            if (m.channel == Channel::Reliable)
+            {
+                reliable_batch.push_back(m);
+            }
+            else
+            {
+                out.unreliable.push_back(m);
+            }
+        }
+        out.reliable = reliable_.receive(reliable_batch);
+        return out;
     }
 
 } // namespace reliable

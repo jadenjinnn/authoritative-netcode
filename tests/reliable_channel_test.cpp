@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "connection.h"
-#include "reliable_channel.h"
+#include "channel.h"
 
 using reliable::Connection;
 using reliable::Message;
