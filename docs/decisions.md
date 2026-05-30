@@ -3,6 +3,22 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-30 — App-layer fragmentation; fragments are not individually reliable
+A serialized packet is split into <=1024-byte fragments, each its own UDP datagram
+with a `FragmentHeader{packet_seq, fragment_id, fragment_count}`; the `Reassembler`
+buffers a group until its last fragment arrives. A group orphaned by a lost fragment
+ages out (bounded to 16 in-flight groups, oldest evicted) rather than completing.
+- **Rejected:** letting IP fragment oversized datagrams (lose one IP fragment and the
+  kernel drops the whole datagram, and many NATs/firewalls drop fragments outright);
+  and making each fragment individually reliable (per-fragment acks/retransmit — far
+  more state than resending the whole packet from the layer above).
+- **Why:** doing it at the app layer controls the loss behavior and keeps every datagram
+  sub-MTU. Fragments stay unreliable on purpose: a lost fragment loses the packet, and
+  the reliable channel above just resends it. The `uint8` count caps a packet at ~260 KB,
+  far above anything we send. Built standalone and unit-tested; wiring it into a unified
+  packet send/recv path waits for the `Peer` abstraction (its own slice, shared with
+  congestion control and the P2 harness) -- one coherent change at a time.
+
 ## 2026-05-30 — Mixed-reliability channels: a channel tag per message, uniform frame
 One connection multiplexes an unreliable stream (snapshots/input — sent once, drop OK)
 and the reliable stream (events) from slice 3. Each message carries a 1-byte channel tag;

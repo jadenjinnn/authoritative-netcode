@@ -6,3 +6,6 @@ target_link_libraries(reliable_messages_demo PRIVATE net reliable Threads::Threa
 
 add_executable(mixed_channels_demo mixed_channels_demo.cpp)
 target_link_libraries(mixed_channels_demo PRIVATE net reliable Threads::Threads)
+
+add_executable(fragmentation_demo fragmentation_demo.cpp)
+target_link_libraries(fragmentation_demo PRIVATE net reliable Threads::Threads)
