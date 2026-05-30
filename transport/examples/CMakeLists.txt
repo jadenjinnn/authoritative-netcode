@@ -12,3 +12,6 @@ target_link_libraries(fragmentation_demo PRIVATE net reliable Threads::Threads)
 
 add_executable(rtt_demo rtt_demo.cpp)
 target_link_libraries(rtt_demo PRIVATE net reliable Threads::Threads)
+
+add_executable(rate_governor_demo rate_governor_demo.cpp)
+target_link_libraries(rate_governor_demo PRIVATE reliable)

@@ -3,6 +3,27 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-30 — Congestion control: Gaffer good/bad-mode rate governor (closes P1)
+`RateGovernor` thresholds on the smoothed RTT from `RttEstimator`: a healthy link runs
+in Good mode at a fast send interval (30 Hz), a congested one (RTT over ~250 ms) drops to
+Bad and a slow interval (10 Hz). Dropping to Bad arms an adaptive penalty -- the link must
+then stay healthy for that long before it earns its way back, and a relapse within the
+good-dwell window doubles the penalty (capped at 60 s) so a flapping link can't thrash the
+send rate. Pure policy on a caller-supplied microsecond clock, same shape as the estimator.
+- **Rejected:** a bare single threshold (flaps mode -- and send rate -- whenever RTT dances
+  around the setpoint); a fixed minimum hold time (doesn't adapt to a chronically flapping
+  link); TCP-style AIMD (wrong curve for real-time, already rejected at the CC level);
+  folding it into `RttEstimator`/`Connection` (breaks the measure/decide/bookkeep split).
+  Also dropped the symmetric penalty *decay* (auto-halving on sustained good): it keys off
+  the same dwell threshold as the doubling, entangling the two: penalty is monotone within a
+  session and decay is a clean follow-up.
+- **Why:** RTT climbs before loss does (a filling queue is latency before it's drops), so
+  it's the early congestion signal. The adaptive penalty is the real mechanism -- it punishes
+  flapping by demanding a longer clean stretch each relapse, which is what keeps a thrashing
+  link from yo-yoing the send rate. This is *rate* control, not bounding the unacked set
+  (that's flow control, still deferred). Built standalone and unit-tested; wiring it into a
+  live send path waits for the `Peer` slice. Closes P1.
+
 ## 2026-05-30 — RTT estimation (foundation for congestion control); latency in the sim
 Congestion control needs an RTT signal, and an RTT signal needs a path with real
 latency. So before the control law: `SimSocket` grew `delay_us`/`jitter_us` (a

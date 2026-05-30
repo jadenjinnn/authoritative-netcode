@@ -31,3 +31,7 @@ gtest_discover_tests(fragment_tests)
 add_executable(rtt_tests rtt_test.cpp)
 target_link_libraries(rtt_tests PRIVATE reliable GTest::gtest_main)
 gtest_discover_tests(rtt_tests)
+
+add_executable(rate_governor_tests rate_governor_test.cpp)
+target_link_libraries(rate_governor_tests PRIVATE reliable GTest::gtest_main)
+gtest_discover_tests(rate_governor_tests)
