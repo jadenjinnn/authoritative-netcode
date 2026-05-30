@@ -3,6 +3,22 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-30 — RTT estimation (foundation for congestion control); latency in the sim
+Congestion control needs an RTT signal, and an RTT signal needs a path with real
+latency. So before the control law: `SimSocket` grew `delay_us`/`jitter_us` (a
+timestamped hold-queue flushed by `pump()`; `delay==0` bypasses it so loss-only
+callers are unchanged), and a standalone `RttEstimator` samples RTT on the first ack
+of each sequence and keeps an EWMA (Gaffer's 10% gain).
+- **Rejected:** threading send/recv timestamps through `Connection` (it's a pure
+  seq/ack bookkeeper -- keep timing out of it); reading a wall clock *inside*
+  `SimSocket`/`RttEstimator` (non-deterministic, untestable). Both instead take
+  caller-supplied microsecond times, so unit tests drive a fake clock.
+- **Why:** the estimator stays decoupled and deterministic; the demo drives it from
+  the ack window it already scans. Smoothing (EWMA) over raw samples is what makes
+  the signal usable for a threshold -- jitter would otherwise flap any decision. This
+  is CC-1; the good/bad-mode rate governor (CC-2) thresholds on `smoothed_us()` and
+  closes P1.
+
 ## 2026-05-30 — App-layer fragmentation; fragments are not individually reliable
 A serialized packet is split into <=1024-byte fragments, each its own UDP datagram
 with a `FragmentHeader{packet_seq, fragment_id, fragment_count}`; the `Reassembler`

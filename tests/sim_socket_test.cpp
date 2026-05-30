@@ -56,3 +56,34 @@ TEST(SimSocket, ZeroLossForwardsEverything) {
     EXPECT_EQ(sim.dropped(), 0u);
     EXPECT_EQ(inner.forwarded, 1000);
 }
+
+TEST(SimSocket, ZeroDelayForwardsWithoutPump) {
+    CountingSocket inner;
+    net::SimSocket sim(inner, {0.0, 0});
+
+    char byte = 0;
+    net::Endpoint dest;
+    sim.send_to(&byte, 1, dest);
+    EXPECT_EQ(inner.forwarded, 1);  // immediate, no pump needed
+}
+
+TEST(SimSocket, LatencyHoldsUntilReleaseTime) {
+    CountingSocket inner;
+    uint64_t clock = 0;
+    net::SimParams params;
+    params.delay_us = 1000;
+    net::SimSocket sim(inner, params, [&clock] { return clock; });
+
+    char byte = 0;
+    net::Endpoint dest;
+    sim.send_to(&byte, 1, dest);   // queued at t=0, release t=1000
+    EXPECT_EQ(inner.forwarded, 0);
+
+    clock = 999;
+    sim.pump();
+    EXPECT_EQ(inner.forwarded, 0);  // still held
+
+    clock = 1000;
+    sim.pump();
+    EXPECT_EQ(inner.forwarded, 1);  // released at its deadline
+}
