@@ -4,6 +4,10 @@ add_executable(sim_tests fixed_timestep_test.cpp)
 target_link_libraries(sim_tests PRIVATE sim GTest::gtest_main)
 gtest_discover_tests(sim_tests)
 
+add_executable(world_tests world_test.cpp)
+target_link_libraries(world_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(world_tests)
+
 add_executable(net_tests udp_socket_test.cpp)
 target_link_libraries(net_tests PRIVATE net GTest::gtest_main)
 gtest_discover_tests(net_tests)
@@ -39,3 +43,11 @@ gtest_discover_tests(rate_governor_tests)
 add_executable(peer_tests peer_test.cpp)
 target_link_libraries(peer_tests PRIVATE reliable GTest::gtest_main)
 gtest_discover_tests(peer_tests)
+
+add_executable(peer_manager_tests peer_manager_test.cpp)
+target_link_libraries(peer_manager_tests PRIVATE reliable GTest::gtest_main)
+gtest_discover_tests(peer_manager_tests)
+
+add_executable(bot_driver_tests bot_driver_test.cpp)
+target_link_libraries(bot_driver_tests PRIVATE bot_driver GTest::gtest_main)
+gtest_discover_tests(bot_driver_tests)

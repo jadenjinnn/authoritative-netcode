@@ -3,6 +3,30 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-31 — Multi-client server + bot harness; the naive full-state baseline (P2 slice 2)
+The server became a real authoritative multi-client server: a `PeerManager` owns one
+`Peer` per remote, `World` holds one entity per client, clients send unreliable `Input`
+(applied to their entity) plus occasional reliable events, and the server broadcasts the
+full state to everyone each tick. A headless `bots/` swarm drives N bots (each a `Peer`)
+to put it under load and read the egress baseline.
+- **Each bot is an entity (not a pure traffic generator):** only this makes the broadcast
+  scale with player count, so the baseline is the deliberately-bad O(N²) curve that
+  motivates P3. Measured (localhost, 60 Hz): N=1 → 1.8 KB/s, N=50 → 1.8 MB/s, N=100 →
+  7.0 MB/s. Per-client egress doubles 50→100 (36→72 KB/s) while clients double → ~4× total.
+  That quadratic is the P2 deliverable; P3 (delta/quantization/AOI) beats it.
+- **`PeerManager` routes by source into per-Peer inboxes:** a `Peer` drains its own socket
+  and assumes one remote, so it can't share the server socket directly. PeerManager owns
+  the real socket, drains once, and feeds each datagram to the owning Peer's private
+  in-memory inbox `ISocket`; sends pass through. Peer stays unmodified. Rejected: teaching
+  Peer to be multi-remote (conflates one connection with a registry of them).
+- **Both channels driven:** authority is the input→sim→state loop (inputs ride *unreliable*
+  — a dropped input is obsolete before a resend arrives). But the harness is Peer's first
+  real multi-client consumer, so bots also send occasional *reliable* events to exercise
+  the reliable channel + mux/demux on a live path. Headline number stays downstream egress.
+- **Stdout for the number, Prometheus next slice; `client/` left as a P0 relic** (its raw
+  single-`Snapshot` reader no longer parses the multi-entity Peer protocol — accepted, the
+  bots are the real client now).
+
 ## 2026-05-31 — Sequence 0 reserved as a null ack sentinel
 Real packet sequences start at 1 and skip 0 on wraparound; `Connection::process_acks`
 ignores `ack == 0`. Surfaced by `Peer`: it sends unconditional heartbeat packets, so a
