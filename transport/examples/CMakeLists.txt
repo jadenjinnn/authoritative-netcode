@@ -15,3 +15,6 @@ target_link_libraries(rtt_demo PRIVATE net reliable Threads::Threads)
 
 add_executable(rate_governor_demo rate_governor_demo.cpp)
 target_link_libraries(rate_governor_demo PRIVATE reliable)
+
+add_executable(peer_demo peer_demo.cpp)
+target_link_libraries(peer_demo PRIVATE reliable)

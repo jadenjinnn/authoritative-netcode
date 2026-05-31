@@ -3,6 +3,45 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-05-31 — Sequence 0 reserved as a null ack sentinel
+Real packet sequences start at 1 and skip 0 on wraparound; `Connection::process_acks`
+ignores `ack == 0`. Surfaced by `Peer`: it sends unconditional heartbeat packets, so a
+peer that has received nothing still advertises its zero-initialized `remote_sequence_`
+(0) as the ack — indistinguishable from a genuine acknowledgement of packet 0. The
+result was a dropped first packet being falsely retired and never resent (one reliable
+message lost, seed-dependent).
+- **Rejected:** a connection handshake that establishes sequence baselines before data
+  flows (the textbook fix, but out of scope until a later phase); a per-packet "have I
+  sent anything?" flag threaded into the ack scan at the `Peer` level (pushes a
+  `Connection` invariant up into its caller, where every future consumer would have to
+  re-derive it).
+- **Why:** reserving one sequence value makes the zero-default unambiguous at the layer
+  that owns sequences, so every consumer (Peer, the demos, the future server) inherits the
+  fix for free. The cost is one unusable sequence per ~65k — negligible. The older demos
+  never hit this because their servers only acked in response to a received packet.
+
+## 2026-05-31 — Peer: one object composes the transport (P2 slice 1)
+`Peer` (one instance per remote) owns the `Connection`, `ChannelMux`/`ChannelDemux`,
+`Reassembler`, `RttEstimator`, and `RateGovernor` by value, behind `queue_reliable` /
+`queue_unreliable` / `update` / `poll`. `update(now_us)` paces sends on the governor's
+interval (its first real consumer) and runs the flush pipeline (pack → serialize →
+fragment → send); `poll(now_us)` reassembles, applies acks, samples RTT, and returns a
+demuxed batch. Times are caller-supplied microseconds, as everywhere else in the layer.
+- **Rejected:** caller-driven pacing with `Peer` as pure mechanism (every consumer —
+  demos, bot harness, server — re-implements the interval check and the 0..32 ack-retire
+  scan, the exact duplication this slice removes); push-style dispatch via per-channel
+  `std::function` callbacks (capture-lifetime footguns, indirection, no benefit in a
+  single-threaded headless harness); migrating the server/client onto Peer in this slice
+  (couples two concerns before a consumer exists). Also kept the composed modules
+  unedited (composition, not inheritance) so the slice stays revertible by deleting one
+  file pair.
+- **Why:** the point of `Peer` is to stop hand-rolling the send/recv glue and to give the
+  finished-but-unconsumed `RateGovernor` something to drive. `poll()` returns the existing
+  `ChannelDemux::Delivery` verbatim, so it's trivial to assert on. The one subtlety worth
+  defending: `update` feeds the governor `rtt_.smoothed_us()` *after* sending, but that
+  reflects prior acks (the just-sent packet has no round-trip yet) — you pace on observed
+  RTT, not an in-flight guess.
+
 ## 2026-05-30 — Congestion control: Gaffer good/bad-mode rate governor (closes P1)
 `RateGovernor` thresholds on the smoothed RTT from `RttEstimator`: a healthy link runs
 in Good mode at a fast send interval (30 Hz), a congested one (RTT over ~250 ms) drops to
