@@ -17,6 +17,10 @@ namespace reliable
 
         acked_[local_sequence_ % kBufferSize] = false;
         ++local_sequence_;
+        if (local_sequence_ == 0)  // skip the reserved sentinel on wraparound
+        {
+            local_sequence_ = 1;
+        }
         return header;
     }
 
@@ -59,6 +63,11 @@ namespace reliable
 
     void Connection::process_acks(uint16_t ack, uint32_t ack_bits)
     {
+        if (ack == 0)  // sentinel: the peer has acknowledged nothing yet
+        {
+            return;
+        }
+
         acked_[ack % kBufferSize] = true;
 
         for (int i = 0; i < 32; ++i)

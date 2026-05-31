@@ -34,7 +34,10 @@ private:
 
     static constexpr int kBufferSize = 1024;
 
-    uint16_t local_sequence_ = 0;
+    // Sequence 0 is reserved as a null sentinel: remote_sequence_ == 0 means "this
+    // peer has acked nothing yet", so the zero-initialized ack field can't be
+    // misread as an acknowledgement of a real packet. Real sequences start at 1.
+    uint16_t local_sequence_ = 1;
     uint16_t remote_sequence_ = 0;
     bool received_any_ = false;
 

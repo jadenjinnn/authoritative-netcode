@@ -52,3 +52,18 @@ TEST(Connection, AcksReportDeliveredPackets)
         EXPECT_EQ(a.is_acked(seq), delivered.count(seq) > 0) << "sequence " << seq;
     }
 }
+
+// A peer that has received nothing from us advertises a default ack of 0. That
+// must not retire our first outstanding packet -- otherwise a dropped first packet
+// is never resent. Sequence 0 is reserved so this default is unambiguous.
+TEST(Connection, DefaultAckFromSilentPeerDoesNotFalselyAck)
+{
+    Connection a;
+    Connection b;
+
+    PacketHeader first = a.next_header();  // a's first packet, lost in transit
+    PacketHeader heartbeat = b.next_header();  // b received nothing, acks its default
+    a.on_received(heartbeat);
+
+    EXPECT_FALSE(a.is_acked(first.sequence));
+}
