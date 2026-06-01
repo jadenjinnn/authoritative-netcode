@@ -3,6 +3,27 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-06-01 — Metrics export + observability stack (P2 slice 3, closes P2)
+The server exports the counters it already computes via prometheus-cpp's `Exposer` (civetweb
+on its own thread serving `/metrics:8080`); the game loop only bumps lock-free metric objects.
+Metrics: `egress_bytes/packets/reliable_events_total` (counters) + `connected_clients`,
+`entities`, `tick_rate_hz` (gauges). Rates are computed in the dashboard via PromQL `rate()`,
+not server-side. Prometheus + Grafana run in Docker Compose (observability only); the measured
+server + bots stay native on the WSL host.
+- **Rejected:** a hand-rolled `/metrics` (re-deriving the exposition format + a non-blocking
+  accept loop is yak-shaving with no learning payoff; "integrated the standard Prometheus
+  client" is the portfolio signal); pre-computed bytes/s gauges (bakes in our 1 s window,
+  loses info, can't re-aggregate — counters + `rate()` is idiomatic and survives restarts);
+  containerizing the server/bots (Docker's NAT hop would taint the latency/bandwidth numbers,
+  same reason k8s was rejected); per-client metric labels (cardinality blowup at N=100 with
+  churn, for zero P2 value — `total / clients` answers per-client cost in the dashboard).
+- **Why:** closes the P2 measurement spine — the baseline is now a live graph, not a one-shot
+  stdout read, giving P3 a before/after instrument. Verified end-to-end: target UP via
+  `host.docker.internal`, dashboard renders, numbers track the O(N²) curve. The Exposer's
+  background thread is the project's one genuinely concurrent piece; prometheus-cpp counters
+  are atomic, so the loop writes while civetweb reads with no lock. stdout printf kept as a
+  dependency-free fallback.
+
 ## 2026-05-31 — Multi-client server + bot harness; the naive full-state baseline (P2 slice 2)
 The server became a real authoritative multi-client server: a `PeerManager` owns one
 `Peer` per remote, `World` holds one entity per client, clients send unreliable `Input`

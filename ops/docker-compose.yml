@@ -1,0 +1,28 @@
+# Observability stack only -- Prometheus + Grafana in containers. The measured
+# server and bots run natively on the WSL host so their latency/bandwidth numbers
+# are never tainted by Docker's NAT/bridge hop (the reason k8s was rejected).
+# Bring up:  docker compose -f ops/docker-compose.yml up
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: netcode-prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: netcode-grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

@@ -20,6 +20,19 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(ENABLE_PUSH OFF CACHE BOOL "" FORCE)
+set(ENABLE_COMPRESSION OFF CACHE BOOL "" FORCE)
+# Compression is off, so zlib isn't needed; stop find_package(ZLIB) from caching a
+# libz.so dev-symlink path that doesn't exist without zlib1g-dev installed.
+set(CMAKE_DISABLE_FIND_PACKAGE_ZLIB ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  prometheus-cpp
+  GIT_REPOSITORY https://github.com/jupp0r/prometheus-cpp.git
+  GIT_TAG v1.2.4
+)
+FetchContent_MakeAvailable(prometheus-cpp)
+
 find_package(Threads REQUIRED)
 
 # Subdirectories are added per phase as modules land.

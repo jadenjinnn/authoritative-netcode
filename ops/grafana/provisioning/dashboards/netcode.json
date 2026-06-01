@@ -1,0 +1,109 @@
+{
+  "title": "Netcode — P2 baseline",
+  "uid": "netcode-p2",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-5m", "to": "now" },
+  "refresh": "1s",
+  "timezone": "",
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total egress (bytes/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(netcode_egress_bytes_total[10s])",
+          "legendFormat": "egress"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Per-client egress (bytes/s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(netcode_egress_bytes_total[10s]) / clamp_min(netcode_connected_clients, 1)",
+          "legendFormat": "per client"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Packets/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "pps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(netcode_egress_packets_total[10s])",
+          "legendFormat": "packets"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Connected clients / entities",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "netcode_connected_clients",
+          "legendFormat": "clients"
+        },
+        {
+          "refId": "B",
+          "expr": "netcode_entities",
+          "legendFormat": "entities"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Tick rate (Hz)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "hertz", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "netcode_tick_rate_hz",
+          "legendFormat": "tick rate"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Reliable events/s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(netcode_reliable_events_total[30s])",
+          "legendFormat": "events/s"
+        }
+      ]
+    }
+  ]
+}
