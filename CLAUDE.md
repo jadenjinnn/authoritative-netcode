@@ -12,9 +12,10 @@ looking like "Hamster v2" (ECS, rendering, editor for its own sake), that's a sm
 
 ## Tech stack
 - **Language/build:** C++17 / CMake
-- **Dev + runtime platform:** WSL2 (Ubuntu) on Windows 11. BSD sockets only; Linux is
-  the measurement target. The socket sits behind a thin interface, but only the BSD
-  backend exists until there's a real reason for a second.
+- **Dev + runtime platform:** native macOS (Apple clang). BSD sockets only — macOS is
+  BSD-derived, so the same backend compiles and measures here; Linux stays a portable
+  deploy target (POSIX-only, no platform shims). The socket sits behind a thin interface,
+  but only the BSD backend exists until there's a real reason for a second.
 - **Tests:** GoogleTest (via FetchContent)
 - **Metrics:** prometheus-cpp client → Prometheus → Grafana (stand up at P2)
 - **Transport library** is a standalone artifact: own folder, own README, own tests.
