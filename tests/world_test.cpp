@@ -82,23 +82,15 @@ TEST(World, FullStateSnapshotRoundTrips) {
     w.step(0.05);
 
     std::vector<EntityState> state = w.snapshot();
-    std::vector<uint8_t> bytes = sim::encode_snapshot(42, state);
+    std::vector<uint8_t> bytes = sim::encode_keyframe(sim::WorldSnapshot{42, state});
 
-    std::optional<sim::WorldSnapshot> decoded = sim::decode_snapshot(bytes.data(), bytes.size());
-    ASSERT_TRUE(decoded.has_value());
-    EXPECT_EQ(decoded->tick, 42u);
-    ASSERT_EQ(decoded->entities.size(), state.size());
+    sim::WorldSnapshot decoded;
+    ASSERT_TRUE(sim::apply_snapshot(decoded, bytes.data(), bytes.size()));
+    EXPECT_EQ(decoded.tick, 42u);
+    ASSERT_EQ(decoded.entities.size(), state.size());
     for (size_t i = 0; i < state.size(); ++i) {
-        EXPECT_EQ(decoded->entities[i].id, state[i].id);
-        EXPECT_FLOAT_EQ(decoded->entities[i].x, state[i].x);
-        EXPECT_FLOAT_EQ(decoded->entities[i].y, state[i].y);
+        EXPECT_EQ(decoded.entities[i].id, state[i].id);
+        EXPECT_FLOAT_EQ(decoded.entities[i].x, state[i].x);
+        EXPECT_FLOAT_EQ(decoded.entities[i].y, state[i].y);
     }
-}
-
-TEST(Snapshot, DecodeRejectsTruncatedBuffer) {
-    World w;
-    w.add_player();
-    std::vector<uint8_t> bytes = sim::encode_snapshot(1, w.snapshot());
-    bytes.resize(bytes.size() - 2);  // chop a partial entity
-    EXPECT_FALSE(sim::decode_snapshot(bytes.data(), bytes.size()).has_value());
 }

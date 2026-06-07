@@ -3,6 +3,30 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-06-07 — Delta compression: per-client baseline via app-level snapshot ack (P3 slice 1)
+The server sends each client a delta of the current tick against the last snapshot that client
+confirmed, falling back to a full keyframe when it has no baseline (new join) or its baseline aged
+out. The ack is app-level: the client stamps `last_received_tick` into its input packets; the
+server keeps a fixed-depth ring (`SnapshotHistory`, 128 ticks) to diff against. Snapshots are
+type-tagged (keyframe vs delta) on the wire; deltas omit unchanged entities (absence = carry
+forward) and list removed ids.
+- **Rejected:** piggybacking the transport's packet ack to learn the baseline — it inverts
+  layering (transport reaching into sim concepts) and acks "datagram arrived," not "snapshot
+  applied," which diverge under fragmentation. Also rejected field-level changed-masks (buys
+  nothing when both position fields move every tick; deferred to the bit-packing slice) and a
+  reliable snapshot channel (stale snapshots are worthless — re-seed with a keyframe instead).
+- **Why:** app-level ack keeps the dependency one-way (sim -> transport) and acks the event we
+  care about; it's the Quake3/Source model. Entity-level granularity is naive-first.
+- **Measured finding (the point of the slice):** at 100% positional churn (all-moving bots) a
+  delta is ~0.5-1% *larger* than a keyframe (extra `baseline_tick` + `removed_count` headers, with
+  every entity sent anyway). N=50: 1837 KB/s delta vs 1819 keyframe (P2 baseline ~1.8 MB/s). N=100:
+  7201 KB/s delta vs 7166 keyframe (P2 ~7.0 MB/s). Tick rate held 60 Hz at N=100 despite per-client
+  serialization. Conclusion: delta's payoff scales with the *idle* fraction, which this synthetic
+  load has none of — the real wins come next from quantization (constant factor, helps even at full
+  churn) and AOI (asymptotic). The machinery is the deliverable; reconciliation (P4) and AOI reuse it.
+- **Cleanup:** removed the now-superseded untagged `encode_snapshot`/`decode_snapshot` rather than
+  leaving a second snapshot format behind (see the spec's implementation-decisions log).
+
 ## 2026-06-01 — Metrics export + observability stack (P2 slice 3, closes P2)
 The server exports the counters it already computes via prometheus-cpp's `Exposer` (civetweb
 on its own thread serving `/metrics:8080`); the game loop only bumps lock-free metric objects.

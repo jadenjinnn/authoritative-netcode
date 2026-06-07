@@ -31,8 +31,11 @@ optimization gated on a measured baseline.
 ## Module map (target)
 - `transport/` — standalone reliable-UDP library (own README + tests)
 - `transport/net/` — BSD socket wrapper + artificial-network shim
-- `protocol/` — L1 state-sync: snapshot / delta / bitstream / AOI
-- `sim/` — L2 shared deterministic simulation (used by both server and client predict)
+- `protocol/` — L1 state-sync: snapshot / delta / bitstream / AOI. Not a separate module yet;
+  through P3 the snapshot codec + delta + per-client history live in `sim/` (split out if it grows).
+- `sim/` — L2 shared deterministic sim + (for now) L1 state-sync: `world`, `snapshot` (keyframe/
+  delta codec, type-tagged), `snapshot_history` (per-client baseline ring), `input` (carries the
+  app-level snapshot ack `last_received_tick`)
 - `server/` — authoritative server: tick loop, per-client state, snapshot send
 - `client/` — game client: predict, reconcile, interpolate, render, debug HUD
 - `bots/` — headless bot client + N-client controller (uses the same transport)
@@ -60,10 +63,13 @@ optimization gated on a measured baseline.
 
 ## Open questions (decide later — do NOT pin now)
 - Client renderer lib: raylib (simplest) vs SDL2 vs SFML. Skeleton is headless, so defer.
-- Entity/ID scheme + quantization params (world size, precision bits). Defer to L1.
+- Entity/ID scheme: settled — `uint32` EntityId, position as 2x `float32` on the wire.
+  Quantization params (world size, precision bits) still open; decide at the bit-packing slice.
 - prometheus-cpp vs a hand-rolled exposition endpoint. Confirm at P2.
 - Packaging: Docker Compose to stand up server + bots + Prometheus + Grafana as a one-command
   reproducible measurement harness — run the *measured* server on host networking so the latency
   numbers stay clean. Not Kubernetes: its NAT/overlay networking fights low-latency UDP (the
   reason Agones exists) and would taint the results table. Confirm at P2.
-- Threading model for snapshot serialization (per-client parallel?). Defer; measure first.
+- Threading model for snapshot serialization (per-client parallel?). Measured at P3: per-client
+  delta serialization (O(clients x entities), one encode per client) held 60 Hz at N=100 with no
+  sag, so single-threaded stands. Revisit if a higher-N or profiling run (P6) finds the ceiling.

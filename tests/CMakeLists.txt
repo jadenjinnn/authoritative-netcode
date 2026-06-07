@@ -8,6 +8,18 @@ add_executable(world_tests world_test.cpp)
 target_link_libraries(world_tests PRIVATE sim GTest::gtest_main)
 gtest_discover_tests(world_tests)
 
+add_executable(input_tests input_test.cpp)
+target_link_libraries(input_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(input_tests)
+
+add_executable(snapshot_delta_tests snapshot_delta_test.cpp)
+target_link_libraries(snapshot_delta_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(snapshot_delta_tests)
+
+add_executable(snapshot_history_tests snapshot_history_test.cpp)
+target_link_libraries(snapshot_history_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(snapshot_history_tests)
+
 add_executable(net_tests udp_socket_test.cpp)
 target_link_libraries(net_tests PRIVATE net GTest::gtest_main)
 gtest_discover_tests(net_tests)

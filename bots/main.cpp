@@ -39,6 +39,7 @@ namespace
         bots::BotDriver driver;
         uint32_t event_seq = 0;
         uint64_t snapshots_recv = 0;
+        sim::WorldSnapshot baseline;  // latest applied state; its tick is the app-level ack
 
         explicit Bot(uint32_t seed) : driver(seed) {}
     };
@@ -80,6 +81,7 @@ int main(int argc, char **argv)
             for (auto &bot : swarm)
             {
                 bots::BotDriver::Emit e = bot->driver.tick(now);
+                e.input.last_received_tick = bot->baseline.tick;
                 bot->peer->queue_unreliable(sim::encode_input(e.input));
                 if (e.event)
                 {
@@ -93,7 +95,13 @@ int main(int argc, char **argv)
         {
             bot->peer->update(now);
             reliable::Peer::Delivery d = bot->peer->poll(now);
-            bot->snapshots_recv += d.unreliable.size();
+            for (const reliable::Message &m : d.unreliable)
+            {
+                if (sim::apply_snapshot(bot->baseline, m.payload.data(), m.payload.size()))
+                {
+                    ++bot->snapshots_recv;
+                }
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::microseconds(500));
