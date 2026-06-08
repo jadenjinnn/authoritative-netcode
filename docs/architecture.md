@@ -34,8 +34,9 @@ optimization gated on a measured baseline.
 - `protocol/` — L1 state-sync: snapshot / delta / bitstream / AOI. Not a separate module yet;
   through P3 the snapshot codec + delta + per-client history live in `sim/` (split out if it grows).
 - `sim/` — L2 shared deterministic sim + (for now) L1 state-sync: `world`, `snapshot` (keyframe/
-  delta codec, type-tagged), `snapshot_history` (per-client baseline ring), `input` (carries the
-  app-level snapshot ack `last_received_tick`)
+  delta codec, type-tagged, bit-packed + quantized positions), `snapshot_history` (per-client
+  baseline ring), `bitstream` (BitWriter/BitReader), `quantize` (position <-> fixed-point),
+  `input` (carries the app-level snapshot ack `last_received_tick`)
 - `server/` — authoritative server: tick loop, per-client state, snapshot send
 - `client/` — game client: predict, reconcile, interpolate, render, debug HUD
 - `bots/` — headless bot client + N-client controller (uses the same transport)
@@ -63,8 +64,8 @@ optimization gated on a measured baseline.
 
 ## Open questions (decide later — do NOT pin now)
 - Client renderer lib: raylib (simplest) vs SDL2 vs SFML. Skeleton is headless, so defer.
-- Entity/ID scheme: settled — `uint32` EntityId, position as 2x `float32` on the wire.
-  Quantization params (world size, precision bits) still open; decide at the bit-packing slice.
+- Entity/ID scheme + quantization: settled. ids are 16-bit on the wire; positions are quantized
+  to 12 bits each over [0, 100] (World's kBound), ~0.024-unit step. (Were float32 pre-bitpacking.)
 - prometheus-cpp vs a hand-rolled exposition endpoint. Confirm at P2.
 - Packaging: Docker Compose to stand up server + bots + Prometheus + Grafana as a one-command
   reproducible measurement harness — run the *measured* server on host networking so the latency

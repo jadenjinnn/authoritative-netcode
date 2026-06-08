@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 
+#include "quantize.h"
 #include "snapshot.h"
 
 using namespace sim;
 
 namespace
 {
+    constexpr float kTol = (kPosMax - kPosMin) / ((1u << kPosBits) - 1);  // one quantization step
+
     WorldSnapshot snap(uint32_t tick, std::vector<EntityState> entities)
     {
         return WorldSnapshot{tick, std::move(entities)};
@@ -32,7 +35,7 @@ TEST(SnapshotDelta, KeyframeRoundTripReplacesPriorState) {
     ASSERT_EQ(base.entities.size(), 3u);
     EXPECT_EQ(base.entities[0].id, 1u);
     EXPECT_EQ(base.entities[2].id, 5u);
-    EXPECT_FLOAT_EQ(base.entities[2].x, 9.f);
+    EXPECT_NEAR(base.entities[2].x, 9.f, kTol);
 }
 
 TEST(SnapshotDelta, DeltaNoChange) {
@@ -59,10 +62,10 @@ TEST(SnapshotDelta, DeltaChangeAddRemove) {
     EXPECT_EQ(held.tick, 12u);
     ASSERT_EQ(held.entities.size(), 3u);
     EXPECT_EQ(held.entities[0].id, 1u);
-    EXPECT_FLOAT_EQ(held.entities[0].x, 1.5f);
+    EXPECT_NEAR(held.entities[0].x, 1.5f, kTol);
     EXPECT_EQ(held.entities[1].id, 3u);
     EXPECT_EQ(held.entities[2].id, 4u);
-    EXPECT_FLOAT_EQ(held.entities[2].x, 4.f);
+    EXPECT_NEAR(held.entities[2].x, 4.f, kTol);
 }
 
 TEST(SnapshotDelta, DeltaRejectedOnBaselineMismatch) {

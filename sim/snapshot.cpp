@@ -1,33 +1,30 @@
 #include "snapshot.h"
 
-#include <cstring>
 #include <map>
+
+#include "bitstream.h"
+#include "quantize.h"
 
 namespace sim
 {
 
-    constexpr size_t kEntrySize = sizeof(EntityId) + sizeof(float) + sizeof(float);
-
     std::vector<uint8_t> encode_keyframe(const WorldSnapshot &snap)
     {
         std::vector<uint8_t> out;
-        out.reserve(1 + sizeof(uint32_t) + sizeof(uint16_t) + snap.entities.size() * kEntrySize);
-        auto append = [&](const void *p, size_t n)
-        {
-            const uint8_t *b = static_cast<const uint8_t *>(p);
-            out.insert(out.end(), b, b + n);
-        };
-
         out.push_back(static_cast<uint8_t>(SnapshotType::Keyframe));
-        append(&snap.tick, sizeof(snap.tick));
-        uint16_t count = static_cast<uint16_t>(snap.entities.size());
-        append(&count, sizeof(count));
+
+        BitWriter w;
+        w.write_bits(snap.tick, 32);
+        w.write_bits(static_cast<uint32_t>(snap.entities.size()), 16);
         for (const EntityState &e : snap.entities)
         {
-            append(&e.id, sizeof(e.id));
-            append(&e.x, sizeof(e.x));
-            append(&e.y, sizeof(e.y));
+            w.write_bits(e.id, 16);
+            w.write_bits(quantize(e.x), kPosBits);
+            w.write_bits(quantize(e.y), kPosBits);
         }
+
+        std::vector<uint8_t> bits = w.take();
+        out.insert(out.end(), bits.begin(), bits.end());
         return out;
     }
 
@@ -72,31 +69,26 @@ namespace sim
         }
 
         std::vector<uint8_t> out;
-        out.reserve(1 + 2 * sizeof(uint32_t) + 2 * sizeof(uint16_t) +
-                    changed.size() * kEntrySize + removed.size() * sizeof(EntityId));
-        auto append = [&](const void *p, size_t n)
-        {
-            const uint8_t *bytes = static_cast<const uint8_t *>(p);
-            out.insert(out.end(), bytes, bytes + n);
-        };
-
         out.push_back(static_cast<uint8_t>(SnapshotType::Delta));
-        append(&curr.tick, sizeof(curr.tick));
-        append(&baseline.tick, sizeof(baseline.tick));
-        uint16_t changed_count = static_cast<uint16_t>(changed.size());
-        append(&changed_count, sizeof(changed_count));
+
+        BitWriter w;
+        w.write_bits(curr.tick, 32);
+        w.write_bits(baseline.tick, 32);
+        w.write_bits(static_cast<uint32_t>(changed.size()), 16);
         for (const EntityState &e : changed)
         {
-            append(&e.id, sizeof(e.id));
-            append(&e.x, sizeof(e.x));
-            append(&e.y, sizeof(e.y));
+            w.write_bits(e.id, 16);
+            w.write_bits(quantize(e.x), kPosBits);
+            w.write_bits(quantize(e.y), kPosBits);
         }
-        uint16_t removed_count = static_cast<uint16_t>(removed.size());
-        append(&removed_count, sizeof(removed_count));
+        w.write_bits(static_cast<uint32_t>(removed.size()), 16);
         for (EntityId id : removed)
         {
-            append(&id, sizeof(id));
+            w.write_bits(id, 16);
         }
+
+        std::vector<uint8_t> bits = w.take();
+        out.insert(out.end(), bits.begin(), bits.end());
         return out;
     }
 
@@ -106,45 +98,36 @@ namespace sim
         {
             return false;
         }
-        size_t off = 1;
-        auto read = [&](void *dst, size_t n) -> bool
-        {
-            if (off + n > len)
-            {
-                return false;
-            }
-            std::memcpy(dst, data + off, n);
-            off += n;
-            return true;
-        };
+        uint8_t type = data[0];
+        BitReader r(data + 1, len - 1);
 
-        if (data[0] == static_cast<uint8_t>(SnapshotType::Keyframe))
+        if (type == static_cast<uint8_t>(SnapshotType::Keyframe))
         {
             WorldSnapshot decoded;
-            uint16_t count = 0;
-            if (!read(&decoded.tick, sizeof(decoded.tick)) || !read(&count, sizeof(count)))
-            {
-                return false;
-            }
+            decoded.tick = r.read_bits(32);
+            uint32_t count = r.read_bits(16);
             decoded.entities.reserve(count);
-            for (uint16_t i = 0; i < count; ++i)
+            for (uint32_t k = 0; k < count; ++k)
             {
                 EntityState e;
-                if (!read(&e.id, sizeof(e.id)) || !read(&e.x, sizeof(e.x)) || !read(&e.y, sizeof(e.y)))
-                {
-                    return false;
-                }
+                e.id = r.read_bits(16);
+                e.x = dequantize(r.read_bits(kPosBits));
+                e.y = dequantize(r.read_bits(kPosBits));
                 decoded.entities.push_back(e);
+            }
+            if (!r.ok())
+            {
+                return false;
             }
             base = std::move(decoded);
             return true;
         }
 
-        if (data[0] == static_cast<uint8_t>(SnapshotType::Delta))
+        if (type == static_cast<uint8_t>(SnapshotType::Delta))
         {
-            uint32_t tick = 0;
-            uint32_t baseline_tick = 0;
-            if (!read(&tick, sizeof(tick)) || !read(&baseline_tick, sizeof(baseline_tick)))
+            uint32_t tick = r.read_bits(32);
+            uint32_t baseline_tick = r.read_bits(32);
+            if (!r.ok())
             {
                 return false;
             }
@@ -153,37 +136,27 @@ namespace sim
                 return false;  // delta is against a baseline we don't hold
             }
 
-            uint16_t changed_count = 0;
-            if (!read(&changed_count, sizeof(changed_count)))
-            {
-                return false;
-            }
+            uint32_t changed_count = r.read_bits(16);
             std::vector<EntityState> changed;
             changed.reserve(changed_count);
-            for (uint16_t i = 0; i < changed_count; ++i)
+            for (uint32_t k = 0; k < changed_count; ++k)
             {
                 EntityState e;
-                if (!read(&e.id, sizeof(e.id)) || !read(&e.x, sizeof(e.x)) || !read(&e.y, sizeof(e.y)))
-                {
-                    return false;
-                }
+                e.id = r.read_bits(16);
+                e.x = dequantize(r.read_bits(kPosBits));
+                e.y = dequantize(r.read_bits(kPosBits));
                 changed.push_back(e);
             }
-            uint16_t removed_count = 0;
-            if (!read(&removed_count, sizeof(removed_count)))
-            {
-                return false;
-            }
+            uint32_t removed_count = r.read_bits(16);
             std::vector<EntityId> removed;
             removed.reserve(removed_count);
-            for (uint16_t i = 0; i < removed_count; ++i)
+            for (uint32_t k = 0; k < removed_count; ++k)
             {
-                EntityId id = 0;
-                if (!read(&id, sizeof(id)))
-                {
-                    return false;
-                }
-                removed.push_back(id);
+                removed.push_back(r.read_bits(16));
+            }
+            if (!r.ok())
+            {
+                return false;
             }
 
             // Merge onto the held baseline via a map: keeps the id-sorted invariant

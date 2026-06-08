@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "input.h"
+#include "quantize.h"
 #include "snapshot.h"
 #include "world.h"
 
@@ -10,6 +11,8 @@ using sim::EntityId;
 using sim::EntityState;
 using sim::Input;
 using sim::World;
+
+constexpr float kTol = (sim::kPosMax - sim::kPosMin) / ((1u << sim::kPosBits) - 1);  // one quantization step
 
 TEST(World, AddPlayerReturnsDistinctIds) {
     World w;
@@ -90,7 +93,7 @@ TEST(World, FullStateSnapshotRoundTrips) {
     ASSERT_EQ(decoded.entities.size(), state.size());
     for (size_t i = 0; i < state.size(); ++i) {
         EXPECT_EQ(decoded.entities[i].id, state[i].id);
-        EXPECT_FLOAT_EQ(decoded.entities[i].x, state[i].x);
-        EXPECT_FLOAT_EQ(decoded.entities[i].y, state[i].y);
+        EXPECT_NEAR(decoded.entities[i].x, state[i].x, kTol);
+        EXPECT_NEAR(decoded.entities[i].y, state[i].y, kTol);
     }
 }

@@ -3,6 +3,25 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-06-07 — Bit-packing + quantization for state sync (P3 slice 2)
+Per-entity wire encoding goes from 12 bytes (u32 id + 2x f32) to 40 bits (16-bit id + two 12-bit
+quantized positions) via a new `BitWriter`/`BitReader` and `quantize`/`dequantize` over [0, 100]
+(World's clamp range). The leading snapshot type byte stays raw for dispatch; the rest of the
+payload is one continuous bitstream (header fields at full width, so no byte-alignment juggling
+between headers and the bit-packed body).
+- **Rejected:** 16-bit positions (half the savings for imperceptible extra precision); field-level
+  / adaptive precision and gap-coded ids (premature; deferred); packing the headers too (marginal).
+- **Why:** quantize + pack is the constant-factor lever that helps even at 100% churn (it shrinks
+  every field on the wire), unlike delta. 12 bits gives a 0.024-unit step — finer than a tick's
+  0.33-unit move — and more than halves the per-entity cost.
+- **Gotchas (interview):** quantize divisor is `2^bits - 1`, not `2^bits` (max maps to the top
+  level, no overflow); round, don't truncate; the bitstream is MSB-first and the reader must mirror
+  the writer; reads past the end latch `ok() = false` (how `apply_snapshot` now rejects truncation).
+- **Measured:** N=50 1837 -> 806 KB/s (-56%), N=100 7201 -> 3088 KB/s (-57%), 60 Hz held, 100%
+  delta under load. A touch under the 58% per-entity figure because packet + Peer transport headers
+  don't shrink. This is the win delta couldn't deliver at full churn.
+- **Hand-write:** Jaden wrote `BitWriter`/`BitReader`; `quantize`/`dequantize` delegated to Claude.
+
 ## 2026-06-07 — Delta compression: per-client baseline via app-level snapshot ack (P3 slice 1)
 The server sends each client a delta of the current tick against the last snapshot that client
 confirmed, falling back to a full keyframe when it has no baseline (new join) or its baseline aged

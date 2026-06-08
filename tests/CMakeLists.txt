@@ -20,6 +20,14 @@ add_executable(snapshot_history_tests snapshot_history_test.cpp)
 target_link_libraries(snapshot_history_tests PRIVATE sim GTest::gtest_main)
 gtest_discover_tests(snapshot_history_tests)
 
+add_executable(bitstream_tests bitstream_test.cpp)
+target_link_libraries(bitstream_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(bitstream_tests)
+
+add_executable(quantize_tests quantize_test.cpp)
+target_link_libraries(quantize_tests PRIVATE sim GTest::gtest_main)
+gtest_discover_tests(quantize_tests)
+
 add_executable(net_tests udp_socket_test.cpp)
 target_link_libraries(net_tests PRIVATE net GTest::gtest_main)
 gtest_discover_tests(net_tests)
