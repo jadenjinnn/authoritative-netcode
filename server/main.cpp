@@ -27,6 +27,7 @@ namespace
     constexpr double kTickHz = 60.0;
     constexpr double kDt = 1.0 / kTickHz;
     constexpr uint64_t kReportEveryUs = 1'000'000;  // print egress once a second
+    constexpr float kAoiRadius = 20.0f;             // each client sees entities within this radius
 
     struct ClientState
     {
@@ -46,6 +47,7 @@ namespace
 int main(int argc, char **argv)
 {
     uint16_t port = (argc > 1) ? static_cast<uint16_t>(std::atoi(argv[1])) : 9999;
+    float world_bound = (argc > 2) ? static_cast<float>(std::atof(argv[2])) : 100.0f;
 
     // Line-buffer stdout so each periodic report lands even when the process is
     // killed (SIGTERM) at the end of a measurement run rather than exiting cleanly.
@@ -56,8 +58,8 @@ int main(int argc, char **argv)
     sock.set_nonblocking();
 
     reliable::PeerManager mgr(sock);
-    sim::World world;
-    sim::SnapshotHistory history;
+    sim::World world(world_bound);
+    sim::SnapshotHistory history(128, world_bound);
     sim::FixedTimestep ts(kDt);
     std::map<net::Endpoint, ClientState> clients;
     uint32_t tick = 0;
@@ -93,6 +95,10 @@ int main(int argc, char **argv)
         .Name("netcode_tick_rate_hz")
         .Help("Authoritative ticks per second in the last report window")
         .Register(*registry).Add({});
+    auto& avg_aoi_gauge = prometheus::BuildGauge()
+        .Name("netcode_avg_aoi_entities")
+        .Help("Average entities within a client's AOI")
+        .Register(*registry).Add({});
     auto& keyframe_packets_metric = prometheus::BuildCounter()
         .Name("netcode_keyframe_packets_total")
         .Help("Keyframe (full-state) snapshot packets sent")
@@ -102,8 +108,8 @@ int main(int argc, char **argv)
         .Help("Delta snapshot packets sent")
         .Register(*registry).Add({});
 
-    std::printf("authoritative server on :%u @ %.0f Hz (Peer protocol, multi-client); /metrics on :8080\n",
-                port, kTickHz);
+    std::printf("authoritative server on :%u @ %.0f Hz (Peer protocol, multi-client); world=%.0f aoi_r=%.0f; /metrics on :8080\n",
+                port, kTickHz, world_bound, kAoiRadius);
 
     uint64_t last = now_us();
     uint64_t report_at = last + kReportEveryUs;
@@ -167,7 +173,7 @@ int main(int argc, char **argv)
             for (const net::Endpoint &e : mgr.endpoints())
             {
                 ClientState &cs = clients[e];
-                std::vector<uint8_t> blob = history.encode_for(cs.last_received_tick, tick);
+                std::vector<uint8_t> blob = history.encode_for(cs.entity, kAoiRadius, cs.last_received_tick, tick);
                 if (blob.empty())
                 {
                     continue;
@@ -193,11 +199,18 @@ int main(int argc, char **argv)
             double bps = static_cast<double>(bytes - last_bytes);  // ~1s window
             uint64_t kf_window = keyframe_packets - last_keyframe_packets;
             uint64_t delta_window = delta_packets - last_delta_packets;
-            std::printf("clients=%zu entities=%zu tick=%u  egress=%.1f KB/s (%.1f KB/s per client)  snap(kf=%llu delta=%llu)  reliable_events=%llu\n",
+            double aoi_sum = 0.0;
+            for (const auto &kv : clients)
+            {
+                aoi_sum += static_cast<double>(history.aoi_count(kv.second.entity, kAoiRadius, tick));
+            }
+            double avg_aoi = clients.empty() ? 0.0 : aoi_sum / clients.size();
+            std::printf("clients=%zu entities=%zu tick=%u  egress=%.1f KB/s (%.1f KB/s per client)  snap(kf=%llu delta=%llu aoi=%.1f)  reliable_events=%llu\n",
                         mgr.size(), world.size(), tick, bps / 1024.0,
                         mgr.size() > 0 ? bps / 1024.0 / mgr.size() : 0.0,
                         static_cast<unsigned long long>(kf_window),
                         static_cast<unsigned long long>(delta_window),
+                        avg_aoi,
                         static_cast<unsigned long long>(reliable_events));
 
             // Feed the same numbers to Prometheus: counters by delta since last report,
@@ -210,6 +223,7 @@ int main(int argc, char **argv)
             clients_gauge.Set(static_cast<double>(mgr.size()));
             entities_gauge.Set(static_cast<double>(world.size()));
             tick_rate_gauge.Set(window_s > 0.0 ? (tick - last_tick) / window_s : 0.0);
+            avg_aoi_gauge.Set(avg_aoi);
 
             last_bytes = bytes;
             last_packets = packets;

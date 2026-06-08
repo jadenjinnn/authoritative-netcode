@@ -7,15 +7,18 @@ namespace sim
 
     namespace
     {
-        constexpr float kBound = 100.0f;
         constexpr float kSpeed = 20.0f;
-        constexpr float kSpawn = kBound / 2.0f;
+    }
+
+    World::World(float bound, uint32_t seed) : bound_(bound), rng_(seed)
+    {
     }
 
     EntityId World::add_player()
     {
         EntityId id = next_id_++;
-        entities_[id] = Entity{kSpawn, kSpawn, 0.0f, 0.0f};
+        std::uniform_real_distribution<float> pos(0.0f, bound_);
+        entities_[id] = Entity{pos(rng_), pos(rng_), 0.0f, 0.0f};
         return id;
     }
 
@@ -41,8 +44,8 @@ namespace sim
         for (auto &entry : entities_)
         {
             Entity &e = entry.second;
-            e.x = std::clamp(e.x + e.vx * d, 0.0f, kBound);
-            e.y = std::clamp(e.y + e.vy * d, 0.0f, kBound);
+            e.x = std::clamp(e.x + e.vx * d, 0.0f, bound_);
+            e.y = std::clamp(e.y + e.vy * d, 0.0f, bound_);
         }
     }
 

@@ -8,7 +8,7 @@
 namespace sim
 {
 
-    std::vector<uint8_t> encode_keyframe(const WorldSnapshot &snap)
+    std::vector<uint8_t> encode_keyframe(const WorldSnapshot &snap, float world_max)
     {
         std::vector<uint8_t> out;
         out.push_back(static_cast<uint8_t>(SnapshotType::Keyframe));
@@ -19,8 +19,8 @@ namespace sim
         for (const EntityState &e : snap.entities)
         {
             w.write_bits(e.id, 16);
-            w.write_bits(quantize(e.x), kPosBits);
-            w.write_bits(quantize(e.y), kPosBits);
+            w.write_bits(quantize(e.x, world_max), kPosBits);
+            w.write_bits(quantize(e.y, world_max), kPosBits);
         }
 
         std::vector<uint8_t> bits = w.take();
@@ -28,7 +28,7 @@ namespace sim
         return out;
     }
 
-    std::vector<uint8_t> encode_delta(const WorldSnapshot &curr, const WorldSnapshot &baseline)
+    std::vector<uint8_t> encode_delta(const WorldSnapshot &curr, const WorldSnapshot &baseline, float world_max)
     {
         const std::vector<EntityState> &c = curr.entities;
         const std::vector<EntityState> &b = baseline.entities;
@@ -78,8 +78,8 @@ namespace sim
         for (const EntityState &e : changed)
         {
             w.write_bits(e.id, 16);
-            w.write_bits(quantize(e.x), kPosBits);
-            w.write_bits(quantize(e.y), kPosBits);
+            w.write_bits(quantize(e.x, world_max), kPosBits);
+            w.write_bits(quantize(e.y, world_max), kPosBits);
         }
         w.write_bits(static_cast<uint32_t>(removed.size()), 16);
         for (EntityId id : removed)
@@ -92,7 +92,7 @@ namespace sim
         return out;
     }
 
-    bool apply_snapshot(WorldSnapshot &base, const uint8_t *data, size_t len)
+    bool apply_snapshot(WorldSnapshot &base, const uint8_t *data, size_t len, float world_max)
     {
         if (len < 1)
         {
@@ -111,8 +111,8 @@ namespace sim
             {
                 EntityState e;
                 e.id = r.read_bits(16);
-                e.x = dequantize(r.read_bits(kPosBits));
-                e.y = dequantize(r.read_bits(kPosBits));
+                e.x = dequantize(r.read_bits(kPosBits), world_max);
+                e.y = dequantize(r.read_bits(kPosBits), world_max);
                 decoded.entities.push_back(e);
             }
             if (!r.ok())
@@ -143,8 +143,8 @@ namespace sim
             {
                 EntityState e;
                 e.id = r.read_bits(16);
-                e.x = dequantize(r.read_bits(kPosBits));
-                e.y = dequantize(r.read_bits(kPosBits));
+                e.x = dequantize(r.read_bits(kPosBits), world_max);
+                e.y = dequantize(r.read_bits(kPosBits), world_max);
                 changed.push_back(e);
             }
             uint32_t removed_count = r.read_bits(16);

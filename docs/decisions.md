@@ -3,6 +3,25 @@
 Short, append-only log of non-obvious architectural choices: the call, the alternative
 rejected, and why. Newest at top. This doubles as interview prep.
 
+## 2026-06-07 — AOI / interest management + density-bounded measurement (P3 slice 3, closes P3)
+Each client receives only entities within radius R=20 of its own entity. The slice-1 delta is
+reused unchanged: filter BOTH the current and baseline snapshots (each centered on the viewer's
+position AT that tick) and diff them — entered-AOI = add, left-AOI = remove. No per-client state is
+stored; the recomputed baseline view matches what the client holds because filtering is
+deterministic (same R, same center from history). Brute-force O(N) query per client.
+- To honestly show the asymptotic win, the world bound + quantize range were made runtime
+  (`quantize(v, max)`) and bots spawn uniformly, enabling a density-controlled sweep.
+- **Rejected:** storing each client's last-sent set (extra state for an unmeasured CPU saving);
+  AOI keyframes without delta; a grid index (premature — brute force holds 60 Hz at N=200; grid is
+  a P6 win with a before/after number); fixed-world-only measurement (would hide the density caveat).
+- **The key insight (interview):** AOI is NOT a free asymptotic win. In a fixed world, growing N
+  raises density, so k ∝ N and total egress stays O(N²) — AOI is just a ~(AOI area / world area)
+  constant factor. The O(N·k) curve-bend appears only under BOUNDED density (world grows with N).
+- **Measured.** Fixed world (constant-factor): N=100 egress 3088 -> ~565 KB/s (~5.5x vs slice 2),
+  avg-k ~14. Density-bounded sweep (R=20, k≈6 held constant): per-client egress FLAT at ~3.3 KB/s
+  across N=50/100/200 (bound 100/141/200) while total scaled linearly (160/327/668 KB/s) — the
+  O(N·k) signature; slice-2 per-client doubled over the same range. 60 Hz held at N=200.
+
 ## 2026-06-07 — Bit-packing + quantization for state sync (P3 slice 2)
 Per-entity wire encoding goes from 12 bytes (u32 id + 2x f32) to 40 bits (16-bit id + two 12-bit
 quantized positions) via a new `BitWriter`/`BitReader` and `quantize`/`dequantize` over [0, 100]

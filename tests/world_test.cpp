@@ -12,7 +12,7 @@ using sim::EntityState;
 using sim::Input;
 using sim::World;
 
-constexpr float kTol = (sim::kPosMax - sim::kPosMin) / ((1u << sim::kPosBits) - 1);  // one quantization step
+constexpr float kTol = 100.0f / ((1u << sim::kPosBits) - 1);  // one quantization step (default world)
 
 TEST(World, AddPlayerReturnsDistinctIds) {
     World w;
@@ -28,13 +28,14 @@ TEST(World, ApplyInputMovesOnlyTargetedEntity) {
     World w;
     EntityId a = w.add_player();
     EntityId b = w.add_player();
+    float ax0 = w.entity(a).x;
     float bx0 = w.entity(b).x;
 
     w.apply_input(a, Input{1.0f, 0.0f});  // a moves +x; b gets nothing
     w.step(0.1);
 
-    EXPECT_GT(w.entity(a).x, w.entity(b).x);
-    EXPECT_FLOAT_EQ(w.entity(b).x, bx0);
+    EXPECT_GT(w.entity(a).x, ax0);        // a moved right from its own spawn
+    EXPECT_FLOAT_EQ(w.entity(b).x, bx0);  // b did not move
 }
 
 TEST(World, StepIntegratesEveryEntity) {
@@ -85,10 +86,10 @@ TEST(World, FullStateSnapshotRoundTrips) {
     w.step(0.05);
 
     std::vector<EntityState> state = w.snapshot();
-    std::vector<uint8_t> bytes = sim::encode_keyframe(sim::WorldSnapshot{42, state});
+    std::vector<uint8_t> bytes = sim::encode_keyframe(sim::WorldSnapshot{42, state}, 100.0f);
 
     sim::WorldSnapshot decoded;
-    ASSERT_TRUE(sim::apply_snapshot(decoded, bytes.data(), bytes.size()));
+    ASSERT_TRUE(sim::apply_snapshot(decoded, bytes.data(), bytes.size(), 100.0f));
     EXPECT_EQ(decoded.tick, 42u);
     ASSERT_EQ(decoded.entities.size(), state.size());
     for (size_t i = 0; i < state.size(); ++i) {

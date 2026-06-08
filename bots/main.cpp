@@ -4,7 +4,8 @@
 // the server's full-state broadcasts. The point is load: run it at increasing N to
 // drive the server and read its egress baseline.
 //
-// Usage: bots [count] [server_ip] [server_port] [seconds]
+// Usage: bots [count] [server_ip] [server_port] [seconds] [world_bound]
+// world_bound must match the server's (both quantize positions over [0, world_bound]).
 
 #include <chrono>
 #include <cstdint>
@@ -53,6 +54,7 @@ int main(int argc, char **argv)
     server.ip = (argc > 2) ? argv[2] : "127.0.0.1";
     server.port = (argc > 3) ? static_cast<uint16_t>(std::atoi(argv[3])) : 9999;
     double seconds = (argc > 4) ? std::atof(argv[4]) : 10.0;
+    float world_bound = (argc > 5) ? static_cast<float>(std::atof(argv[5])) : 100.0f;
 
     std::vector<std::unique_ptr<Bot>> swarm;
     swarm.reserve(count);
@@ -97,7 +99,7 @@ int main(int argc, char **argv)
             reliable::Peer::Delivery d = bot->peer->poll(now);
             for (const reliable::Message &m : d.unreliable)
             {
-                if (sim::apply_snapshot(bot->baseline, m.payload.data(), m.payload.size()))
+                if (sim::apply_snapshot(bot->baseline, m.payload.data(), m.payload.size(), world_bound))
                 {
                     ++bot->snapshots_recv;
                 }

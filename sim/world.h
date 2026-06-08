@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
+#include <random>
 #include <vector>
 
 #include "input.h"
@@ -16,10 +18,14 @@ struct Entity {
 };
 
 // Authoritative game state: one entity per connected client. Clients send inputs;
-// the server applies them and integrates. Full state is every entity.
+// the server applies them and integrates. Full state is every entity. The world is a
+// [0, bound] x [0, bound] box; bound scales with population in the density sweep.
 class World {
 public:
-    // Spawn an entity for a newly connected client; returns its stable id.
+    explicit World(float bound = 100.0f, uint32_t seed = 1u);
+
+    // Spawn an entity for a newly connected client at a uniform-random point in the
+    // box; returns its stable id.
     EntityId add_player();
     void remove_player(EntityId id);
 
@@ -36,6 +42,8 @@ public:
     const Entity& entity(EntityId id) const { return entities_.at(id); }
 
 private:
+    float bound_;
+    std::mt19937 rng_;
     EntityId next_id_ = 1;
     std::map<EntityId, Entity> entities_;
 };
